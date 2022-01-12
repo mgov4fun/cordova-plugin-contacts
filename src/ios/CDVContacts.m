@@ -202,10 +202,30 @@
 
     CDVPluginResult *errorResult = [CDVPluginResult resultWithStatus: CDVCommandStatus_ERROR messageAsInt:PERMISSION_DENIED_ERROR];
 
-    // if the access is already restricted/denied the only way is to fail
-    if (status == kABAuthorizationStatusRestricted || status == kABAuthorizationStatusDenied) {
+    // if the access is already restricted the only way is to fail
+    if (status == kABAuthorizationStatusRestricted) {
         [self.commandDelegate sendPluginResult: errorResult callbackId:command.callbackId];
         return;
+    }
+    
+    //if status is denied, we want to show the dialog allowing the user to go to the settings
+    if (status == kABAuthorizationStatusDenied) {
+        //[self.commandDelegate sendPluginResult: errorResult callbackId:command.callbackId];
+        //return;
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            UIAlertController *alertController = [UIAlertController alertControllerWithTitle:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleDisplayName"] message:NSLocalizedString(@"Access to the contacts has been prohibited. Please enable it in the Settings app to continue.", nil) preferredStyle:UIAlertControllerStyleAlert];
+            [alertController addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"OK", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                [self.commandDelegate sendPluginResult: errorResult callbackId:command.callbackId];
+            }]];
+            [alertController addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Settings", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                [[UIApplication sharedApplication] openURL:[NSURL URLWithString:UIApplicationOpenSettingsURLString]];
+                [self.commandDelegate sendPluginResult: errorResult callbackId:command.callbackId];
+            }]];
+            [self.viewController presentViewController:alertController animated:YES completion:nil];
+            return;
+        });
+        
     }
 
     // if no permissions granted try to request them first
@@ -217,7 +237,18 @@
                     return;
                 }
             
-                [self.commandDelegate sendPluginResult: errorResult callbackId:command.callbackId];
+                //[self.commandDelegate sendPluginResult: errorResult callbackId:command.callbackId];
+                
+                UIAlertController *alertController = [UIAlertController alertControllerWithTitle:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleDisplayName"] message:NSLocalizedString(@"Access to the contacts has been prohibited. Please enable it in the Settings app to continue.", nil) preferredStyle:UIAlertControllerStyleAlert];
+                [alertController addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"OK", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                    [self.commandDelegate sendPluginResult: errorResult callbackId:command.callbackId];
+                }]];
+                [alertController addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Settings", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                    [[UIApplication sharedApplication] openURL:[NSURL URLWithString:UIApplicationOpenSettingsURLString]];
+                    [self.commandDelegate sendPluginResult: errorResult callbackId:command.callbackId];
+                }]];
+                [self.viewController presentViewController:alertController animated:YES completion:nil];
+                return;
             });
         });
     }
@@ -318,7 +349,38 @@
         // it gets uglier, block within block.....
         [abHelper createAddressBook: ^(ABAddressBookRef addrBook, CDVAddressBookAccessError* errCode) {
             if (addrBook == NULL) {
+                
+                /*
                 // permission was denied or other error - return error
+                CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:errCode ? (int)errCode.errorCode:UNKNOWN_ERROR];
+                [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
+                return;
+                 */
+                
+                ABAuthorizationStatus status = ABAddressBookGetAuthorizationStatus();
+                if (status == kABAuthorizationStatusDenied) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        /*
+                        UIAlertController *alertController = [UIAlertController alertControllerWithTitle:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleDisplayName"] message:NSLocalizedString(@"Access to the contacts has been prohibited. Please enable it in the Settings app to continue.", nil) preferredStyle:UIAlertControllerStyleAlert];
+                        [alertController addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"OK", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                            CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:errCode ? (int)errCode.errorCode:UNKNOWN_ERROR];
+                            [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
+                        }]];
+                        [alertController addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Settings", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:UIApplicationOpenSettingsURLString]];
+                            CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:errCode ? (int)errCode.errorCode:UNKNOWN_ERROR];
+                            [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
+                        }]];
+                        [weakSelf.viewController presentViewController:alertController animated:YES completion:nil];
+                        */
+                        
+                        [weakSelf showNoPermissionDialog:callbackId andErroDialog:errCode];
+                        
+                    });
+                    return;
+                }
+                
+                // some other error - return error
                 CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:errCode ? (int)errCode.errorCode:UNKNOWN_ERROR];
                 [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
                 return;
@@ -424,10 +486,41 @@
         [abHelper createAddressBook: ^(ABAddressBookRef addrBook, CDVAddressBookAccessError* errorCode) {
             CDVPluginResult* result = nil;
             if (addrBook == NULL) {
+                /*
                 // permission was denied or other error - return error
                 result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsInt:errorCode ? (int)errorCode.errorCode:UNKNOWN_ERROR];
                 [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
                 return;
+                 */
+                
+                ABAuthorizationStatus status = ABAddressBookGetAuthorizationStatus();
+                if (status == kABAuthorizationStatusDenied) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        /*
+                        UIAlertController *alertController = [UIAlertController alertControllerWithTitle:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleDisplayName"] message:NSLocalizedString(@"Access to the contacts has been prohibited. Please enable it in the Settings app to continue.", nil) preferredStyle:UIAlertControllerStyleAlert];
+                        [alertController addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"OK", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                            CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:errorCode ? (int)errorCode.errorCode:UNKNOWN_ERROR];
+                            [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
+                        }]];
+                        [alertController addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Settings", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:UIApplicationOpenSettingsURLString]];
+                            CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:errorCode ? (int)errorCode.errorCode:UNKNOWN_ERROR];
+                            [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
+                        }]];
+                        [weakSelf.viewController presentViewController:alertController animated:YES completion:nil];
+                        */
+                        
+                        [weakSelf showNoPermissionDialog:callbackId andErroDialog:errorCode];
+                        
+                    });
+                    return;
+                }
+                
+                // some other error - return error
+                CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:errorCode ? (int)errorCode.errorCode:UNKNOWN_ERROR];
+                [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
+                return;
+                
             }
 
             bool bIsError = FALSE, bSuccess = FALSE;
@@ -495,10 +588,44 @@
     [abHelper createAddressBook: ^(ABAddressBookRef addrBook, CDVAddressBookAccessError* errorCode) {
         CDVPluginResult* result = nil;
         if (addrBook == NULL) {
+            
+            /*
             // permission was denied or other error - return error
             result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsInt:errorCode ? (int)errorCode.errorCode:UNKNOWN_ERROR];
             [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
             return;
+            */
+            
+        
+            ABAuthorizationStatus status = ABAddressBookGetAuthorizationStatus();
+            if (status == kABAuthorizationStatusDenied) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    /*
+                    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleDisplayName"] message:NSLocalizedString(@"Access to the contacts has been prohibited. Please enable it in the Settings app to continue.", nil) preferredStyle:UIAlertControllerStyleAlert];
+                    [alertController addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"OK", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:errorCode ? (int)errorCode.errorCode:UNKNOWN_ERROR];
+                        [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
+                    }]];
+                    [alertController addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Settings", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:UIApplicationOpenSettingsURLString]];
+                        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:errorCode ? (int)errorCode.errorCode:UNKNOWN_ERROR];
+                        [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
+                    }]];
+                    [weakSelf.viewController presentViewController:alertController animated:YES completion:nil];
+                     */
+                    
+                    [weakSelf showNoPermissionDialog:callbackId andErroDialog:errorCode];
+                    
+                });
+                return;
+            }
+            
+            // some other error - return error
+            CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:errorCode ? (int)errorCode.errorCode:UNKNOWN_ERROR];
+            [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
+            return;
+             
+            
         }
 
         bool bIsError = FALSE, bSuccess = FALSE;
@@ -547,6 +674,24 @@
         }
     }];
     return;
+}
+
+- (void)showNoPermissionDialog:(NSString*) callbackId andErroDialog:(CDVAddressBookAccessError*) errorCode {
+    
+    CDVContacts* __weak weakSelf = self;
+    
+    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleDisplayName"] message:NSLocalizedString(@"Access to the contacts has been prohibited. Please enable it in the Settings app to continue.", nil) preferredStyle:UIAlertControllerStyleAlert];
+    [alertController addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"OK", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:errorCode ? (int)errorCode.errorCode:UNKNOWN_ERROR];
+        [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
+    }]];
+    [alertController addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Settings", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:UIApplicationOpenSettingsURLString]];
+        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:errorCode ? (int)errorCode.errorCode:UNKNOWN_ERROR];
+        [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
+    }]];
+    [weakSelf.viewController presentViewController:alertController animated:YES completion:nil];
+    
 }
 
 @end
