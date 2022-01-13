@@ -333,9 +333,7 @@
                 ABAuthorizationStatus status = ABAddressBookGetAuthorizationStatus();
                 if (status == kABAuthorizationStatusDenied) {
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        
                         [weakSelf showNoPermissionDialog:callbackId andResult:result];
-                        
                     });
                     return;
                 }
