@@ -528,7 +528,6 @@
             
             result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsInt:errorCode ? (int)errorCode.errorCode:UNKNOWN_ERROR];
             
-        
             ABAuthorizationStatus status = ABAddressBookGetAuthorizationStatus();
             if (status == kABAuthorizationStatusDenied) {
                 dispatch_async(dispatch_get_main_queue(), ^{
@@ -591,8 +590,8 @@
     return;
 }
 
-- (void)showNoPermissionDialog:(NSString*) callbackId andResult:(CDVPluginResult*) result {
-    
+- (void)showNoPermissionDialog:(NSString*) callbackId andResult:(CDVPluginResult*) result
+{
     CDVContacts* __weak weakSelf = self;
     
     UIAlertController *alertController = [UIAlertController alertControllerWithTitle:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleDisplayName"] message:NSLocalizedString(@"Access to the contacts has been prohibited. Please enable it in the Settings app to continue.", nil) preferredStyle:UIAlertControllerStyleAlert];
@@ -604,7 +603,6 @@
         [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
     }]];
     [weakSelf.viewController presentViewController:alertController animated:YES completion:nil];
-    
 }
 
 @end
