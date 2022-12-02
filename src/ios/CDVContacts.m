@@ -202,10 +202,18 @@
 
     CDVPluginResult *errorResult = [CDVPluginResult resultWithStatus: CDVCommandStatus_ERROR messageAsInt:PERMISSION_DENIED_ERROR];
 
-    // if the access is already restricted/denied the only way is to fail
-    if (status == kABAuthorizationStatusRestricted || status == kABAuthorizationStatusDenied) {
+    // if the access is already restricted the only way is to fail
+    if (status == kABAuthorizationStatusRestricted) {
         [self.commandDelegate sendPluginResult: errorResult callbackId:command.callbackId];
         return;
+    }
+    
+    //if status is denied, we want to show the dialog allowing the user to go to the settings
+    if (status == kABAuthorizationStatusDenied) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self showNoPermissionDialog:command.callbackId andResult:errorResult];
+            return;
+        });
     }
 
     // if no permissions granted try to request them first
@@ -216,8 +224,9 @@
                     [self chooseContact:newCommand];
                     return;
                 }
-            
-                [self.commandDelegate sendPluginResult: errorResult callbackId:command.callbackId];
+                //if permissions are denied, show dialog and send error
+                [self showNoPermissionDialog:command.callbackId andResult:errorResult];
+                return;
             });
         });
     }
@@ -318,8 +327,18 @@
         // it gets uglier, block within block.....
         [abHelper createAddressBook: ^(ABAddressBookRef addrBook, CDVAddressBookAccessError* errCode) {
             if (addrBook == NULL) {
-                // permission was denied or other error - return error
+                
                 CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:errCode ? (int)errCode.errorCode:UNKNOWN_ERROR];
+                
+                ABAuthorizationStatus status = ABAddressBookGetAuthorizationStatus();
+                if (status == kABAuthorizationStatusDenied) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [weakSelf showNoPermissionDialog:callbackId andResult:result];
+                    });
+                    return;
+                }
+                
+                // some other error - return error
                 [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
                 return;
             }
@@ -424,10 +443,21 @@
         [abHelper createAddressBook: ^(ABAddressBookRef addrBook, CDVAddressBookAccessError* errorCode) {
             CDVPluginResult* result = nil;
             if (addrBook == NULL) {
-                // permission was denied or other error - return error
+
                 result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsInt:errorCode ? (int)errorCode.errorCode:UNKNOWN_ERROR];
+                
+                ABAuthorizationStatus status = ABAddressBookGetAuthorizationStatus();
+                if (status == kABAuthorizationStatusDenied) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [weakSelf showNoPermissionDialog:callbackId andResult:result];
+                    });
+                    return;
+                }
+                
+                // some other error - return error
                 [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
                 return;
+                
             }
 
             bool bIsError = FALSE, bSuccess = FALSE;
@@ -495,10 +525,21 @@
     [abHelper createAddressBook: ^(ABAddressBookRef addrBook, CDVAddressBookAccessError* errorCode) {
         CDVPluginResult* result = nil;
         if (addrBook == NULL) {
-            // permission was denied or other error - return error
+            
             result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsInt:errorCode ? (int)errorCode.errorCode:UNKNOWN_ERROR];
+            
+            ABAuthorizationStatus status = ABAddressBookGetAuthorizationStatus();
+            if (status == kABAuthorizationStatusDenied) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [weakSelf showNoPermissionDialog:callbackId andResult:result];
+                });
+                return;
+            }
+            
+            // some other error - return error
             [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
             return;
+             
         }
 
         bool bIsError = FALSE, bSuccess = FALSE;
@@ -547,6 +588,21 @@
         }
     }];
     return;
+}
+
+- (void)showNoPermissionDialog:(NSString*) callbackId andResult:(CDVPluginResult*) result
+{
+    CDVContacts* __weak weakSelf = self;
+    
+    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleDisplayName"] message:NSLocalizedString(@"Access to the contacts has been prohibited. Please enable it in the Settings app to continue.", nil) preferredStyle:UIAlertControllerStyleAlert];
+    [alertController addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"OK", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
+    }]];
+    [alertController addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Settings", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:UIApplicationOpenSettingsURLString]];
+        [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
+    }]];
+    [weakSelf.viewController presentViewController:alertController animated:YES completion:nil];
 }
 
 @end
